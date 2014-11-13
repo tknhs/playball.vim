@@ -6,10 +6,6 @@ let g:loaded_playball = 1
 let s:save_cpo = &cpo
 set cpo&vim
 
-if !has('python')
-  finish
-endif
-
 if !exists('g:playball_enable') || g:playball_enable != 1
   finish
 endif

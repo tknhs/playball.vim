@@ -4,6 +4,7 @@
 ## インストール
 
 ```vim
+NeoBundle 'mattn/webapi-vim'
 NeoBundle 'tknhs/playball.vim'
 ```
 
@@ -18,8 +19,9 @@ let g:playball_team='DB' " チーム名: 英字省略表記
 ## 使い方
 
 ```vim
-:Playball       " 設定したチーム
-:Playball DB    " チーム名を指定する
+:Playball             " 設定したチーム
+:Playball DB          " チーム名を指定
+:Playball DB 20140920 " チーム名と日付を指定
 ```
 
 ## 使用できるチーム名

@@ -1,97 +1,62 @@
 function! playball#Playball(...) abort
+  let pluginName = "Playball.vim: "
+  let teamDict = {"G": "読売", "D": "中日", "T": "阪神",
+        \ "DB": "横浜DeNA", "C": "広島東洋", "S": "東京ヤクルト",
+        \ "H": "福岡ソフトバンク", "M": "千葉ロッテ", "Bs": "オリックス",
+        \ "L": "埼玉西武", "F": "北海道日本ハム", "E": "東北楽天"}
+  let date = strftime("%Y%m%d", localtime())
+
   if a:0 >= 1
-    let team = a:1
+    let p_args = split(a:1, " ")
+    let myTeam = p_args[0]
+    if len(p_args) == 2
+      let date = p_args[1]
+    endif
   else
-    let team = g:playball_team
+    let myTeam = g:playball_team
   end
 
-python << EOF
-import datetime
-import sys
-import urllib2
-import vim
-import lxml.html
-
-def getGameInfo(today, team, league):
-  """
-  対戦相手，球場，時間を返す
-  """
-  n_year, n_month, n_day = today
-  url = 'http://www.npb.or.jp/CGI/schedule/view.cgi?league_cd='+league+'&s_date='+n_year+'0301&e_date='+n_year+'1031'
-  html = urllib2.urlopen(url).read() # html 取得
-  root = lxml.html.fromstring(html, parser=lxml.html.HTMLParser(encoding='shift-jis'))
-
-  color = '#CCFFCC' if league == 'C' else '#FFFFCC'
-  trs = root.xpath('//tr[@bgcolor="' + color + '"]')
-  for i, tr in enumerate(trs):
-    # 日付
-    day = tr.xpath('td[@align="RIGHT"]/text()')[0]
-    if n_month[1] + '/' in day:
-      tr = trs[i+int(n_day)-1]
-      # 試合日程
-      games = tr.xpath('td[@align="RIGHT"]/following-sibling::node()//text()')
-      if not True in [team in game.split('-') for game in games]:
-        # team の試合がない
-        return False
-      num = [team in game.split('-') for game in games].index(True)
-      # DB-S, 神宮, 6:00
-      return map(lambda x: x.encode('utf-8'), games[num:num+3])
-  return False
-
-def main():
-  centralEN = ['G', 'D', 'T', 'DB', 'C', 'S']
-  centralJA = ['読売', '中日', '阪神', '横浜DeNA', '広島東洋', '東京ヤクルト']
-  pacificEN = ['H', 'M', 'Bs', 'L', 'F', 'E']
-  pacificJA = ['福岡ソフトバンク', '千葉ロッテ', 'オリックス', '埼玉西武', '北海道日本ハム', '東北楽天']
-
-  team = vim.eval('team')
-  if not team in centralEN + pacificEN:
-    info = 'Playball: Setting Error'
-    return [info, 'error']
-
-  # リーグ: セントラル or パシフィック
-  league = 'C' if team in centralEN else 'P'
-
-  today = datetime.datetime.now().strftime('%Y %m %d').split()
-  #today = ['2014', '05', '10']
-  gameInfo = getGameInfo(today, team, league)
-  if not gameInfo:
-    info = 'Playball: ' + '/'.join(today) + ' 今日は試合がありません'
-    return [info, 'success']
-
-  # チーム略称を英語から日本語に変換
-  teams = dict(zip(centralEN + pacificEN, centralJA + pacificJA))
-  gameTeamNames = [teams[gameTeamName] for gameTeamName in gameInfo[0].split('-')]
-  gameInfo[0] = ' vs '.join(gameTeamNames)
-
-  # ゲーム開始時刻を24時間表記に変換
-  gameStartTime = gameInfo[2].split(':')
-  gameStartTime[0] = str(int(gameStartTime[0]) + 12)
-  gameInfo[2] = ':'.join(gameStartTime)
-
-  # result
-  info = ' '.join(['Playball:', '/'.join(today), gameInfo[2] + ',', ', '.join(gameInfo[:2])])
-  return [info, 'success']
-
-infoMsg = infoType = ''
-try:
-  infoMsg, infoType = main()
-except urllib2.URLError as e:
-  # ネットワークに繋がっていない
-  pass
-
-vim.command('let infoMsg="' + infoMsg + '"')
-vim.command('let infoType="' + infoType + '"')
-EOF
-
-  if infoType == 'success'
-    echohl MoreMsg | echo infoMsg | echohl None
-  elseif infoType == 'error'
+  " エラーチェック
+  if len(date) != 8
+    let infoMsg = pluginName."日付が不正 Ex) 20140920"
     echohl ErrorMsg | echo infoMsg | echohl None
-  else
-    echohl WarningMsg | echo infoMsg | echohl None
+    return
   endif
-endfunction
+  if has_key(teamDict, myTeam) != 1
+    let infoMsg = pluginName."チーム名が不正 Ex) DB"
+    echohl ErrorMsg | echo infoMsg | echohl None
+    return
+  endif
 
-"let g:playball_team='DB'
-"command! -nargs=? Playball call playball#Playball(<f-args>)
+let url = "https://npbann.appspot.com/api/game?date=".date
+let res = webapi#http#get(url)
+if res['status'] != 200
+  let infoMsg = pluginName."ネットワークエラー"
+  echohl WarningMsg | echo infoMsg | echohl None
+  return
+endif
+let content = webapi#json#decode(res.content)
+
+let date = content.date
+let date = date[0:3]."/".date[4:5]."/".date[6:7]
+
+let infoMsg = pluginName. join([date, "試合はありません"], ", ")
+let game = content.game
+for g in game
+  let isMyTeam = "false"
+  for t in split(g.team, "-")
+    if t == myTeam
+      let isMyTeam = "true"
+    endif
+  endfor
+
+  if isMyTeam == "true"
+    let team = split(g.team, "-")
+    let g.team = teamDict[team[0]]." vs ".teamDict[team[1]]
+    let infoMsg = pluginName.date." ".join([g.time, g.team, g.place], ", ")
+    break
+  endif
+endfor
+
+echohl MoreMsg | echo infoMsg | echohl None
+endfunction
