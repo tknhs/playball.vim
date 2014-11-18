@@ -11,7 +11,6 @@ NeoBundle 'tknhs/playball.vim'
 ## 設定
 
 ```vim
-set runtimepath+=~/.vim/bundle/playball.vim
 let g:playball_enable=1
 let g:playball_team='DB' " チーム名: 英字省略表記
 ```
